@@ -1,6 +1,8 @@
 
+import tensorflow as tf
 import argparse
 import urllib3
+import math
 import cv2
 import re
 import os
@@ -15,11 +17,11 @@ url_validation = re.compile(
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
 
-def download_video(url, video_path):
+def download_video(url, path, name):
 
     c = urllib3.PoolManager()
 
-    with open(video_path, 'wb') as path:
+    with open(f'{path}/{name}', 'wb') as path:
 
         with c.request('GET', url, preload_content=False) as video:
 
@@ -36,6 +38,43 @@ def download_video(url, video_path):
         video.release_conn()
 
 
+def frame_capture(path, name, threshold=.9, fps=50):
+
+    vidObj = cv2.VideoCapture(f'{path}/{name}')
+
+    frameRate = vidObj.get(cv2.CAP_PROP_FPS) * fps  #  Frame rate.
+
+    success, current_frame = vidObj.read()
+
+    counter = 0
+
+    while vidObj.isOpened():
+
+        frameId = vidObj.get(1)     # Current position of the video file in milliseconds or video capture timestamp.
+
+        success, new_frame = vidObj.read()
+
+        if frameId % math.floor(frameRate) == 0:
+
+            ssim1 = tf.image.ssim(tf.constant(current_frame), tf.constant(new_frame), max_val=255)
+
+            if ssim1 < threshold:
+
+                cv2.imwrite(f'{path}/{name}_{counter}.jpg', current_frame)
+
+                current_frame = new_frame
+                
+                counter = counter + 1
+
+            print(ssim1)
+
+
+    vidObj.release()
+
+    cv2.destroyAllWindows()
+
+
+
 def main():
 
     parser = argparse.ArgumentParser(description='Slide extractor from video')
@@ -46,13 +85,66 @@ def main():
 
     args = parser.parse_args()
 
-    if re.match(url_validation, f'{args.url}/{args.video}'):
-        download_video(args.url, args.path)
+    if re.match(url_validation, args.url):
+        download_video(args.url, args.path, args.name)
+
+    frame_capture(args.path, args.name)
 
     if args.remove:
-        os.remove(f'{args.path}/{args.video}')
+        os.remove(f'{args.path}/{args.name}')
     
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
+'''def frame_capture(path, name, nth_frame=20):
+
+    vidObj = cv2.VideoCapture(f'{path}/{name}')
+
+    frameRate = vidObj.get(cv2.CAP_PROP_FPS) * nth_frame  #  Frame rate.
+
+    cost_function = lambda f1, f2: sum(pow(f1-f2, 2)) / len(f1)
+
+    counter = 0
+
+    original = None
+
+    while vidObj.isOpened():
+
+        frameId = vidObj.get(1)     # Current position of the video file in milliseconds or video capture timestamp.
+
+        success, image = vidObj.read()
+
+        if not success:
+            break
+
+        if frameId % math.floor(frameRate) == 0:
+
+            if original is None:
+                original = image.flatten()
+
+            else:
+
+                waste = cost_function(original, image.flatten())
+
+                if waste >= 10:
+
+                    original = image.flatten()
+
+                    counter = counter + 1
+
+                    cv2.imwrite(f'{path}/{name}_{counter}.jpg', image)
+
+
+                print(f'{counter}. waste={waste}')
+
+            if counter == 20:
+                break
+
+    vidObj.release()
+    cv2.destroyAllWindows()
+'''
