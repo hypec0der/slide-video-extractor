@@ -4,6 +4,7 @@ import argparse
 import urllib3
 import math
 import cv2
+import sys
 import re
 import os
 
@@ -17,11 +18,70 @@ url_validation = re.compile(
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
 
+class VideoFramesComp():
+
+    def __init__(self, path, name, ext='.mp4', fps=60):
+        
+        self.path = path
+        self.name = name
+        self.ext = ext
+        self.fps = fps  #  Frame rate.
+    
+
+    def nextframe(self):
+
+        while True:
+
+            # Current position of the video file in milliseconds or video capture timestamp.
+            self.frameId = self.vidObj.get(1)
+
+            success, new_frame = self.vidObj.read()
+
+            if self.frameId % math.floor(self.frameRate) == 0:
+                
+                return tf.constant(new_frame)
+
+
+    def compare(self, img1, img2, threshold=.9):
+
+        ssim1 = tf.image.ssim(img1, img2, max_val=255)
+
+        return True if ssim1 >= threshold else False
+
+
+    def isOpened(self):
+
+        return self.vidObj.isOpened()
+
+    
+    def saveframe(self, img1, ext='.jpg'):
+
+        cv2.imwrite(f'{self.path}/{self.name}_{self.frameId}{ext}', img1.numpy())
+
+
+    def __enter__(self):
+
+        self.vidObj = cv2.VideoCapture(f'{self.path}/{self.name}{self.ext}')
+
+        #  Frame rate.
+        self.frameRate = self.vidObj.get(cv2.CAP_PROP_FPS) * self.fps  
+
+        return self
+
+
+    def __exit__(self, type, value, traceback):
+
+        self.vidObj.release()
+
+        cv2.destroyAllWindows()
+
+
+
 def download_video(url, path, name):
 
     c = urllib3.PoolManager()
 
-    with open(f'{path}/{name}', 'wb') as path:
+    with open(f'{path}/{name}.mp4', 'wb') as path:
 
         with c.request('GET', url, preload_content=False) as video:
 
@@ -38,9 +98,64 @@ def download_video(url, path, name):
         video.release_conn()
 
 
-def frame_capture(path, name, threshold=.9, fps=50):
 
-    vidObj = cv2.VideoCapture(f'{path}/{name}')
+def frame_capture(path, name, threshold, fps):
+
+    with VideoFramesComp(path, name, fps=fps) as video:
+
+        current_frame = video.nextframe()
+
+        while video.isOpened():
+
+            new_frame = video.nextframe()
+
+            if video.compare(current_frame, new_frame, threshold) is False:
+
+                video.saveframe(current_frame)
+
+                current_frame = new_frame
+
+
+
+def main():
+
+    parser = argparse.ArgumentParser(description='Slide extractor from video')
+    parser.add_argument('-u','--url',dest='url',required=True,help='Insert url (or local path) where video is located')
+    parser.add_argument('-d','--dir',dest='path',default=os.getcwd(),help='Enter path where both video and slides will be stored')
+    parser.add_argument('-n','--name',dest='name',default='temp',help='Name the video that will be stored in directory')
+    parser.add_argument('-r','--del',dest='remove',default=False,action='store_true',help='Remove video after processing (default false)')
+    parser.add_argument('-f','--fps',dest='fps',default=50,help='Select frame every n-th second')
+    parser.add_argument('-t','--thold',dest='threshold',default=.9,help='Select threshold')
+
+    args = parser.parse_args()
+
+    try:
+
+        # Download video from url
+        if re.match(url_validation, args.url):
+            download_video(args.url, args.path, args.name)
+
+        # Convert each frame in jpg format
+        frame_capture(args.url, args.name, threshold=args.threshold, fps=args.fps)
+
+        # If remove is True then remove video
+        if args.remove:
+            os.remove(f'{args.path}/{args.name}')
+    
+    except KeyboardInterrupt as interrupt:
+        sys.exit(0)
+
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+'''def frame_capture(path, name, threshold=.9, fps=50):
+
+    vidObj = cv2.VideoCapture(f'{path}/{name}.mp4')
 
     frameRate = vidObj.get(cv2.CAP_PROP_FPS) * fps  #  Frame rate.
 
@@ -66,85 +181,6 @@ def frame_capture(path, name, threshold=.9, fps=50):
                 
                 counter = counter + 1
 
-            print(ssim1)
-
-
     vidObj.release()
 
-    cv2.destroyAllWindows()
-
-
-
-def main():
-
-    parser = argparse.ArgumentParser(description='Slide extractor from video')
-    parser.add_argument('-u','--url',dest='url',required=True,help='Insert url (or local path) where video is located')
-    parser.add_argument('-d','--dir',dest='path',default=os.getcwd(),help='Enter path where both video and slides will be stored')
-    parser.add_argument('-n','--name',dest='name',default='temp.mp4',help='Name the video that will be stored in directory')
-    parser.add_argument('-r','--del',dest='remove',default=False,action='store_true',help='Remove video after processing (default false)')
-
-    args = parser.parse_args()
-
-    if re.match(url_validation, args.url):
-        download_video(args.url, args.path, args.name)
-
-    frame_capture(args.path, args.name)
-
-    if args.remove:
-        os.remove(f'{args.path}/{args.name}')
-    
-
-
-if __name__ == "__main__":
-    main()
-
-
-
-
-'''def frame_capture(path, name, nth_frame=20):
-
-    vidObj = cv2.VideoCapture(f'{path}/{name}')
-
-    frameRate = vidObj.get(cv2.CAP_PROP_FPS) * nth_frame  #  Frame rate.
-
-    cost_function = lambda f1, f2: sum(pow(f1-f2, 2)) / len(f1)
-
-    counter = 0
-
-    original = None
-
-    while vidObj.isOpened():
-
-        frameId = vidObj.get(1)     # Current position of the video file in milliseconds or video capture timestamp.
-
-        success, image = vidObj.read()
-
-        if not success:
-            break
-
-        if frameId % math.floor(frameRate) == 0:
-
-            if original is None:
-                original = image.flatten()
-
-            else:
-
-                waste = cost_function(original, image.flatten())
-
-                if waste >= 10:
-
-                    original = image.flatten()
-
-                    counter = counter + 1
-
-                    cv2.imwrite(f'{path}/{name}_{counter}.jpg', image)
-
-
-                print(f'{counter}. waste={waste}')
-
-            if counter == 20:
-                break
-
-    vidObj.release()
-    cv2.destroyAllWindows()
-'''
+    cv2.destroyAllWindows()'''
