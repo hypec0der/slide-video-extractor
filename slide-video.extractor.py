@@ -127,7 +127,7 @@ class DownloadVideo(urllib3.PoolManager):
 
         self.request_headers = self.request.headers
 
-        assert self.request == 200, Exception()
+        assert self.request.status == 200, Exception(f'Error code {self.request.status}')
 
         return self
 
@@ -149,16 +149,18 @@ def download_video(url, path, name):
                 with open(f'{path}/{name}.mp4', 'wb') as path:
 
                     while video_download.nextframe():
-                
+                        
+                        # Print download progress
                         video_download.print_progress()
 
+                        # Write to file 
                         path.write(video_download.current_frame)
 
             except:
 
                 print(f'Cannot open {path}/{name}')
 
-    except Exception():
+    except:
 
         print(f'Cannot download video from {url}')
 
@@ -203,11 +205,11 @@ def main():
         # Download video from url
         if re.match(URL_VALIDATION, args.url):
 
-            print(f'Start downloading video from url {args.url}\n')                
+            print(f'\nStart downloading video from url {args.url}\n')                
             
             download_video(args.url, args.path, args.name)
 
-            print('Download complete! Start analyzing video and extract slides ... \n')
+            print('\nDownload complete! Start analyzing video and extract slides ... \n')
 
 
         # Convert each frame in jpg format
