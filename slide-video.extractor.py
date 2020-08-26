@@ -2,6 +2,7 @@
 import tensorflow as tf
 import argparse
 import urllib3
+import img2pdf
 import math
 import cv2
 import sys
@@ -152,53 +153,67 @@ class DownloadVideo(urllib3.PoolManager):
 
 
 def download_video(url, path, name):
-
-    try:
         
-        with DownloadVideo(url) as video_download:
+    with DownloadVideo(url) as video_download:
 
-            try:
+        with open(f'{path}/{name}.mp4', 'wb') as path:
 
-                with open(f'{path}/{name}.mp4', 'wb') as path:
-
-                    while video_download.nextframe():
+            while video_download.nextframe():
                         
-                        # Print download bar progress
-                        video_download.print_progress()
+                # Print download bar progress
+                video_download.print_progress()
 
-                        # Write to file 
-                        path.write(video_download.current_frame)
-
-            except:
-
-                print(f'Cannot open filepath {path}/{name}')
-
-    except:
-
-        print(f'Cannot download video from {url}')
+                # Write to file 
+                path.write(video_download.current_frame)
 
 
 
-def frame_capture(path, name, threshold, fps):
+def frame_extraction(path, name, threshold, fps):
 
     with VideoFramesComp(path, name, fps=fps) as video:
         
         # Slide to be compared
         old_frame = video.nextframe()
 
-        while video.nextframe():
+        while video.isOpened():
 
             # Get current extracted frame
-            new_frame = video.current_frame
+            new_frame = video.nextframe()
 
             # Print extraction bar progress
             video.print_progress()  
 
-            if video.compare(old_frame, new_frame, threshold) is False:
+            if new_frame is None:
 
                 video.saveframe(old_frame)
 
-                old_frame = new_frame
+                break
+
+            else:
+
+                if video.compare(old_frame, new_frame, threshold) is False:
+
+                    video.saveframe(old_frame)
+
+                    old_frame = new_frame
+
+
+
+def merge_images(path, pdf_name):
+
+    with open(f'{path}/{pdf_name}.pdf', 'wb') as pdf:
+
+        images = [f'{path}/{image}' for image in os.listdir(path) if image.endswith(".jpg")]
+        
+        images = sorted(images, key=lambda name: int(re.search('(\d+).\d*.jpg', name).group(1)))
+
+        pdf.write(img2pdf.convert(images))
+
+
+
+def remove_video(path, name):
+
+    os.remove(f'{path}/{name}.mp4')
 
 
 
@@ -211,13 +226,13 @@ def main():
     parser.add_argument('-r','--del',dest='remove',default=False,action='store_true',help='Remove video after processing it (default false)')
     parser.add_argument('-f','--fps',dest='fps',default=50,help='Select frame every n-th second')
     parser.add_argument('-t','--thold',dest='threshold',default=.9,help='Select threshold 0 < t <= 1 (sometimes 0.9 is good for slides)')
-    parser.add_argument('-s','--start',dest='start',default=0,help='Select ')
-    parser.add_argument('-v','--verbose',dest='verbose',action='store_true',default=False)
+    parser.add_argument('-m','--merge',dest='merge',action='store_true',default=True)
 
     args = parser.parse_args()
 
     try:
 
+    
         # Download video from url
         if re.match(URL_VALIDATION, args.url):
 
@@ -230,13 +245,10 @@ def main():
 
         # Convert each frame in jpg format
         if args.path is not None:
-
-            # Remove debugging information printed by function ssim
-            tf.logging.set_verbosity(tf.logging.ERROR)
             
             print('\nStart analyzing video and extract slides ...\n')
 
-            frame_capture(args.path, args.name, threshold=args.threshold, fps=args.fps)
+            frame_extraction(args.path, args.name, threshold=args.threshold, fps=args.fps)
 
             print(f'\n\nExtraction completed, you can find all extracted slides in {args.path}')
 
@@ -244,10 +256,17 @@ def main():
         # If remove is True then remove video
         if args.remove:
 
-            print('\n\nRemoving file video ... ')
+            print('\n\nRemoving file video ... \n')
 
-            os.remove(f'{args.path}/{args.name}.mp4')
-    
+            remove_video(args.path, args.name)
+
+
+        if args.merge:
+
+            print('\n\nMerging images into pdf ... \n')
+
+            merge_images(args.path, args.name)
+
 
     except KeyboardInterrupt as interrupt:
 
@@ -256,25 +275,6 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
 
-
-
-
-
-'''    def nextframe(self):
-
-        while True:
-
-            # Current position of the video file in milliseconds or video capture timestamp.
-            self.frameId = self.vidObj.get(cv2.CAP_PROP_POS_FRAMES)
-
-            success, new_frame = self.vidObj.read()
-
-            if not success:
-
-                return None
-
-            if self.frameId % math.floor(self.frameRate) == 0:
-                
-                return tf.constant(new_frame)'''
