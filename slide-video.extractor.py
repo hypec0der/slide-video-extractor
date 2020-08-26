@@ -20,6 +20,13 @@ URL_VALIDATION = re.compile(
 
 class VideoFramesComp():
 
+    path = None
+    name = None
+    ext = None
+    fps = None
+
+    current_frame = None
+
     def __init__(self, path, name, ext='.mp4', fps=60):
         
         self.path = path
@@ -37,11 +44,18 @@ class VideoFramesComp():
 
             success, new_frame = self.vidObj.read()
 
-            if self.frameId % math.floor(self.frameRate) == 0:
+            if success: 
                 
-                return tf.constant(new_frame)
+                if self.frameId % math.floor(self.frameRate) == 0:  
 
+                    self.current_frame = tf.constant(new_frame)
 
+                    return self.current_frame
+
+            else:
+
+                return None
+                
 
     def compare(self, img1, img2, threshold=.9):
 
@@ -87,7 +101,6 @@ class VideoFramesComp():
 
 
 class DownloadVideo(urllib3.PoolManager):
-
 
     _FRAME_LENGTH = 65565
 
@@ -150,7 +163,7 @@ def download_video(url, path, name):
 
                     while video_download.nextframe():
                         
-                        # Print download progress
+                        # Print download bar progress
                         video_download.print_progress()
 
                         # Write to file 
@@ -169,20 +182,23 @@ def download_video(url, path, name):
 def frame_capture(path, name, threshold, fps):
 
     with VideoFramesComp(path, name, fps=fps) as video:
+        
+        # Slide to be compared
+        old_frame = video.nextframe()
 
-        current_frame = video.nextframe()
+        while video.nextframe():
 
-        while video.isOpened():
+            # Get current extracted frame
+            new_frame = video.current_frame
 
-            new_frame = video.nextframe()
+            # Print extraction bar progress
+            video.print_progress()  
 
-            video.print_progress()
+            if video.compare(old_frame, new_frame, threshold) is False:
 
-            if video.compare(current_frame, new_frame, threshold) is False:
+                video.saveframe(old_frame)
 
-                video.saveframe(current_frame)
-
-                current_frame = new_frame
+                old_frame = new_frame
 
 
 
@@ -214,6 +230,9 @@ def main():
 
         # Convert each frame in jpg format
         if args.path is not None:
+
+            # Remove debugging information printed by function ssim
+            tf.logging.set_verbosity(tf.logging.ERROR)
             
             print('\nStart analyzing video and extract slides ...\n')
 
@@ -243,41 +262,19 @@ if __name__ == "__main__":
 
 
 
-'''def download_video(url, path, name):
+'''    def nextframe(self):
 
-    c = urllib3.PoolManager()
-    # Packet received counter
-    packet = 0
+        while True:
 
-    print(f'Start downloading from url -> {url}')
+            # Current position of the video file in milliseconds or video capture timestamp.
+            self.frameId = self.vidObj.get(cv2.CAP_PROP_POS_FRAMES)
 
-    # Open file in write/binary mode
-    with open(f'{path}/{name}.mp4', 'wb') as path:
-    
-        with c.request('GET', url, preload_content=False) as video:
+            success, new_frame = self.vidObj.read()
 
-            if video.status != 200:
+            if not success:
 
-                raise Exception(f'Cannot download file from url {url}')
+                return None
 
-            content_length = int(video.headers.get('Content-Length'))
-
-            while True:
-
-                data = video.read(FRAME)
-
-                if not data:
-
-                    break
-                        
-                # Print progress 
-                progress = math.floor(((packet * FRAME) / content_length) * 100)
-
-                print(f"{'='*progress}> {' '*(100-progress)} {progress}%", end='\r')
-                    
-                packet = packet + 1
-
-                # Write packet data into file video
-                path.write(data)
-
-            print('\n Download completed!')'''
+            if self.frameId % math.floor(self.frameRate) == 0:
+                
+                return tf.constant(new_frame)'''
