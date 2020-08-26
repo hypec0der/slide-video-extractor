@@ -179,38 +179,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-'''def frame_capture(path, name, threshold=.9, fps=50):
-
-    vidObj = cv2.VideoCapture(f'{path}/{name}.mp4')
-
-    frameRate = vidObj.get(cv2.CAP_PROP_FPS) * fps  #  Frame rate.
-
-    success, current_frame = vidObj.read()
-
-    counter = 0
-
-    while vidObj.isOpened():
-
-        frameId = vidObj.get(1)     # Current position of the video file in milliseconds or video capture timestamp.
-
-        success, new_frame = vidObj.read()
-
-        if frameId % math.floor(frameRate) == 0:
-
-            ssim1 = tf.image.ssim(tf.constant(current_frame), tf.constant(new_frame), max_val=255)
-
-            if ssim1 < threshold:
-
-                cv2.imwrite(f'{path}/{name}_{counter}.jpg', current_frame)
-
-                current_frame = new_frame
-                
-                counter = counter + 1
-
-    vidObj.release()
-
-    cv2.destroyAllWindows()'''
