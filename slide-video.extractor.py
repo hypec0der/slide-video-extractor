@@ -123,9 +123,9 @@ def main():
     parser.add_argument('-u','--url',dest='url',required=True,help='Insert url (or local path) where video is located')
     parser.add_argument('-d','--dir',dest='path',default=os.getcwd(),help='Enter path where both video and slides will be stored')
     parser.add_argument('-n','--name',dest='name',default='temp',help='Name the video that will be stored in directory')
-    parser.add_argument('-r','--del',dest='remove',default=False,action='store_true',help='Remove video after processing (default false)')
+    parser.add_argument('-r','--del',dest='remove',default=False,action='store_true',help='Remove video after processing it (default false)')
     parser.add_argument('-f','--fps',dest='fps',default=50,help='Select frame every n-th second')
-    parser.add_argument('-t','--thold',dest='threshold',default=.9,help='Select threshold')
+    parser.add_argument('-t','--thold',dest='threshold',default=.9,help='Select threshold 0 < t <= 1 (sometimes 0.9 is good for slides)')
 
     args = parser.parse_args()
 
