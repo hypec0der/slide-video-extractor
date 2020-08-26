@@ -1,4 +1,5 @@
 
+from natsort import natsorted
 import tensorflow as tf
 import argparse
 import urllib3
@@ -205,7 +206,7 @@ def merge_images(path, pdf_name):
 
         images = [f'{path}/{image}' for image in os.listdir(path) if image.endswith(".jpg")]
         
-        images = sorted(images, key=lambda name: int(re.search('(\d+).\d*.jpg', name).group(1)))
+        images = natsorted(images)
 
         pdf.write(img2pdf.convert(images))
 
@@ -223,10 +224,10 @@ def main():
     parser.add_argument('-u','--url',dest='url',help='Insert url (or local path) where video is located')
     parser.add_argument('-d','--dir',dest='path',default=os.getcwd(),help='Enter path where both video and slides will be stored')
     parser.add_argument('-n','--name',dest='name',default='temp',help='Name the video that will be stored in directory')
-    parser.add_argument('-r','--del',dest='remove',default=False,action='store_true',help='Remove video after processing it (default false)')
-    parser.add_argument('-f','--fps',dest='fps',default=50,help='Select frame every n-th second')
-    parser.add_argument('-t','--thold',dest='threshold',default=.9,help='Select threshold 0 < t <= 1 (sometimes 0.9 is good for slides)')
-    parser.add_argument('-m','--merge',dest='merge',action='store_true',default=True)
+    parser.add_argument('-m','--merge',dest='merge',action='store_true',default=True,help='Merge all slides into one pdf file')
+    parser.add_argument('-r','--remove', dest='remove',choices=['all','slides','video'],help='Remove video or slides or both')
+    parser.add_argument('-s','--seconds',dest='seconds',default=50,help='Select frame every n-th second')
+    parser.add_argument('-t','--threshold',dest='threshold',default=.9)
 
     args = parser.parse_args()
 
@@ -248,7 +249,7 @@ def main():
             
             print('\nStart analyzing video and extract slides ...\n')
 
-            frame_extraction(args.path, args.name, threshold=args.threshold, fps=args.fps)
+            frame_extraction(args.path, args.name, threshold=args.threshold, fps=args.seconds)
 
             print(f'\n\nExtraction completed, you can find all extracted slides in {args.path}')
 
