@@ -9,15 +9,13 @@ import re
 import os
 
 
-url_validation = re.compile(
+URL_VALIDATION = re.compile(
         r'^(?:http|ftp)s?://' # http:// or https://
         r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' #domain...
         r'localhost|' #localhost...
         r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})' # ...or ip
         r'(?::\d+)?' # optional port
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-
-
 
 
 class VideoFramesComp():
@@ -61,14 +59,19 @@ class VideoFramesComp():
 
         cv2.imwrite(f'{self.path}/{self.name}_{self.frameId}{ext}', img1.numpy())
 
+    
+    def print_progress(self):
+
+        progress = math.floor((self.frameId / self.totalFrames)*100)
+
+        print(f"{'='*progress}> {' '*(100-progress)} {progress}%", end='\r')
+
 
     def __enter__(self):
 
         self.vidObj = cv2.VideoCapture(f'{self.path}/{self.name}{self.ext}')
-
         #  Frame rate.
         self.frameRate = self.vidObj.get(cv2.CAP_PROP_FPS) * self.fps  
-
         # Get total number of frames
         self.totalFrames = self.vidObj.get(cv2.CAP_PROP_FRAME_COUNT)
 
@@ -83,43 +86,81 @@ class VideoFramesComp():
 
 
 
-def download_video(url, path, name, verbose=False):
+class DownloadVideo(urllib3.PoolManager):
 
-    c = urllib3.PoolManager()
 
-    packet = 0
+    _FRAME_LENGTH = 65565
 
-    print(f'Start downloading from url -> {url}')
+    request_headers = None
+    frame_counter = 0
+    url = None
 
-    with open(f'{path}/{name}.mp4', 'wb') as path:
 
-        with c.request('GET', url, preload_content=False) as video:
+    def __init__(self, url):
 
-            if verbose:
+        super().__init__()
 
-                print(c.headers)
+        self.url = url
 
-            content_length = int(video.headers.get('Content-Length'))
 
-            while True:
+    def nextframe(self):
 
-                data = video.read(65565)
+        self.frame_counter += 1
 
-                if not data:
+        self.current_frame = self.request.read(DownloadVideo._FRAME_LENGTH)
 
-                    break
+        return None if not self.current_frame else self.current_frame
 
-                progress = math.floor(((packet * 65565) / content_length) * 100)
 
-                print(f"{'='*progress}>", end='\r')
+    def print_progress(self):
 
-                packet = packet + 1
-                    
-                path.write(data)
+        content_length = int(self.request_headers.get('Content-Length', 0))
 
-        print('\n')
+        progress = math.floor(((self.frame_counter * DownloadVideo._FRAME_LENGTH) / content_length) * 100)
 
-        video.release_conn()
+        print(f"{'='*progress}> {' '*(100-progress)} {progress}%", end='\r')
+
+
+    def __enter__(self):
+
+        self.request = self.request('GET', self.url, preload_content=False)
+
+        self.request_headers = self.request.headers
+
+        assert self.request == 200, Exception()
+
+        return self
+
+    
+    def __exit__(self, type, value, traceback):
+
+        self.request.release_conn()
+
+
+
+def download_video(url, path, name):
+
+    try:
+        
+        with DownloadVideo(url) as video_download:
+
+            try:
+
+                with open(f'{path}/{name}.mp4', 'wb') as path:
+
+                    while video_download.nextframe():
+                
+                        video_download.print_progress()
+
+                        path.write(video_download.current_frame)
+
+            except:
+
+                print(f'Cannot open {path}/{name}')
+
+    except Exception():
+
+        print(f'Cannot download video from {url}')
 
 
 
@@ -133,9 +174,7 @@ def frame_capture(path, name, threshold, fps):
 
             new_frame = video.nextframe()
 
-            progress = math.floor((video.frameId / video.totalFrames)*100)
-
-            print(f'{"="*progress}>', end='\r')
+            video.print_progress()
 
             if video.compare(current_frame, new_frame, threshold) is False:
 
@@ -162,16 +201,27 @@ def main():
     try:
 
         # Download video from url
-        if re.match(url_validation, args.url):
+        if re.match(URL_VALIDATION, args.url):
+
+            print(f'Start downloading video from url {args.url}\n')                
+            
             download_video(args.url, args.path, args.name)
 
+            print('Download complete! Start analyzing video and extract slides ... \n')
+
+
         # Convert each frame in jpg format
-        frame_capture(args.path, args.name, threshold=args.threshold, fps=args.fps)
+        if args.path is not None:
+            
+            frame_capture(args.path, args.name, threshold=args.threshold, fps=args.fps)
+
 
         # If remove is True then remove video
         if args.remove:
-            os.remove(f'{args.path}/{args.name}')
+
+            os.remove(f'{args.path}/{args.name}.mp4')
     
+
     except KeyboardInterrupt as interrupt:
         sys.exit(0)
 
@@ -179,3 +229,46 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+'''def download_video(url, path, name):
+
+    c = urllib3.PoolManager()
+    # Packet received counter
+    packet = 0
+
+    print(f'Start downloading from url -> {url}')
+
+    # Open file in write/binary mode
+    with open(f'{path}/{name}.mp4', 'wb') as path:
+    
+        with c.request('GET', url, preload_content=False) as video:
+
+            if video.status != 200:
+
+                raise Exception(f'Cannot download file from url {url}')
+
+            content_length = int(video.headers.get('Content-Length'))
+
+            while True:
+
+                data = video.read(FRAME)
+
+                if not data:
+
+                    break
+                        
+                # Print progress 
+                progress = math.floor(((packet * FRAME) / content_length) * 100)
+
+                print(f"{'='*progress}> {' '*(100-progress)} {progress}%", end='\r')
+                    
+                packet = packet + 1
+
+                # Write packet data into file video
+                path.write(data)
+
+            print('\n Download completed!')'''
