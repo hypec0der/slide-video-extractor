@@ -158,7 +158,7 @@ def download_video(url, path, name):
 
             except:
 
-                print(f'Cannot open {path}/{name}')
+                print(f'Cannot open filepath {path}/{name}')
 
     except:
 
@@ -209,22 +209,29 @@ def main():
             
             download_video(args.url, args.path, args.name)
 
-            print('\nDownload complete! Start analyzing video and extract slides ... \n')
+            print('\n\nDownload complete! \n')
 
 
         # Convert each frame in jpg format
         if args.path is not None:
             
+            print('\nStart analyzing video and extract slides ...\n')
+
             frame_capture(args.path, args.name, threshold=args.threshold, fps=args.fps)
+
+            print(f'\n\nExtraction completed, you can find all extracted slides in {args.path}')
 
 
         # If remove is True then remove video
         if args.remove:
 
+            print('\n\nRemoving file video ... ')
+
             os.remove(f'{args.path}/{args.name}.mp4')
     
 
     except KeyboardInterrupt as interrupt:
+
         sys.exit(0)
 
 
